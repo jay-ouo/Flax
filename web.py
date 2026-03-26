@@ -10,6 +10,7 @@ def index():
 	link += "<a href=/me>關於我</a><hr>"
 	link += "<a href=/welcome?u=周英智&d=靜宜資管&c=資訊管理導論>Get傳值</a><hr>"
 	link += "<a href=/account>Post傳值</a><hr>"
+	link +="<a href=/math>次方與根號計算</a><hr>"
 	return link
 	
 @app.route("/mis")
@@ -41,6 +42,31 @@ def account():
         return result
     else:
         return render_template("account.html")
+
+@app.route("/math", methods=["GET", "POST"])
+def math_calc():
+    if request.method == "POST":
+        try:
+            x = float(request.form["x"])
+            opt = request.form["opt"]
+            y = float(request.form["y"])
+            
+            if opt == "^":
+                result = x ** y
+            elif opt == "√":
+                if y == 0:
+                    result = "錯誤：不能開0次方根"
+                else:
+                    result = x ** (1/y)
+            else:
+                result = "運算符號錯誤"
+            return f"計算結果為：{result} <br><a href='/math'>回計算機</a>"
+        except:
+            return "請輸入正確的數字！<br><a href='/math'>返回</a>"
+    else:
+    	
+        return render_template("math.html")
+
 
 
 if __name__ == "__main__":

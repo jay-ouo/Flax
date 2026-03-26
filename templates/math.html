@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>次方與根號計算機</title>
+</head>
+<body>
+    <h2>次方與根號計算機</h2>
+    <form action="/math" method="post">
+        請輸入 x：<input type="number" name="x" required step="any"><br><br>
+        
+        運算符號：
+        <select name="opt">
+            <option value="^">^ (次方)</option>
+            <option value="√">√ (根號)</option>
+        </select><br><br>
+        
+        請輸入 y：<input type="number" name="y" required step="any"><br><br>
+        
+        <button type="submit">計算</button>
+    </form>
+
+    {% if result is not none %}
+        <hr>
+        <h3>結果：{{ result }}</h3>
+    {% endif %}
+    
+    <br>
+    <a href="/">回首頁</a>
+</body>
+</html>

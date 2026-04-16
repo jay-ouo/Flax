@@ -34,9 +34,26 @@ def index():
     link += "<a href=/account>Post傳值</a><hr>"
     link += "<a href=/math>次方與根號計算</a><hr>"
     link += "<a href=/read>讀取Firestore資料</a><hr>"
-    link += "<a href=/read2>查詢老師研究室</a><hr>"   
+    link += "<a href=/read2>查詢老師研究室</a><hr>"
+    link += "<a href=/spider>爬取子青老師本學期課程</a><hr>"
+
     return link
 
+@app.route("/spider")
+def spider():
+    R = ""
+    url = "https://www1.pu.edu.tw/~tcyang/course.html"
+    Data = requests.get(url)
+    Data.encoding = "utf-8"
+    #print(Data.text)
+    sp = BeautifulSoup(Data.text, "html.parser")
+    result=sp.select(".team-box a")
+
+    for i in result:
+        R += i.text + i.get("href") + "<br>"
+    return R
+    
+    
 @app.route("/read2")
 def read2():
     keyword = request.args.get("keyword")
@@ -54,7 +71,7 @@ def read2():
         return html_form
 
     db = firestore.client()
-    collection_ref = db.collection("靜宜資管")
+    collection_ref = db.collection("靜宜資管2026B")
     docs = collection_ref.stream()
    
     Result = f"<h3>您搜尋的關鍵字：{keyword}</h3>"

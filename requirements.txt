@@ -1,3 +1,4 @@
 flask
-flask_admin
-bs4
+requests
+beautifulsoup4
+firebase_admin

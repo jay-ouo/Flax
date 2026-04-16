@@ -1,3 +1,6 @@
+import requests
+from bs4 import BeautifulSoup
+
 from flask import Flask,render_template,request
 from datetime import datetime
 
@@ -12,9 +15,8 @@ if os.path.exists('serviceAccountKey.json'):
     cred = credentials.Certificate('serviceAccountKey.json')
 else:
     # 雲端環境：從環境變數讀取 JSON 字串
-    firebase_config = os.getenv('FIREBASE_CONFIG')
-    cred_dict = json.loads(firebase_config)
-    cred = credentials.Certificate(cred_dict)
+    fcred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
 
 firebase_admin.initialize_app(cred)
 
@@ -31,17 +33,44 @@ def index():
     link += "<a href=/welcome?u=周英智&d=靜宜資管&c=資訊管理學系二B>Post傳值</a><hr>"
     link += "<a href=/account>Post傳值</a><hr>"
     link += "<a href=/math>次方與根號計算</a><hr>"
-    link += "<a href=/read>讀取Firestore資料</a><hr>"  
+    link += "<a href=/read>讀取Firestore資料</a><hr>"
+    link += "<a href=/read2>查詢老師研究室</a><hr>"   
     return link
 
-@app.route("/read")
-def read():
-    Result = ""
+@app.route("/read2")
+def read2():
+    keyword = request.args.get("keyword")
+   
+    if not keyword:
+        html_form = """
+        <h2>搜尋老師系統</h2>
+        <form action="/read2" method="GET">
+            請輸入名字關鍵字：<input type="text" name="keyword" required>
+            <input type="submit" value="開始搜尋">
+        </form>
+        <br>
+        <a href="/">返回首頁</a>
+        """
+        return html_form
+
     db = firestore.client()
-    collection_ref = db.collection("靜宜資管2026B")    
-    docs = collection_ref.order_by("lab",direction=firestore.Query.DESCENDING).get()    
-    for doc in docs:         
-        Result +=str(doc.to_dict()) + "<br>"    
+    collection_ref = db.collection("靜宜資管")
+    docs = collection_ref.stream()
+   
+    Result = f"<h3>您搜尋的關鍵字：{keyword}</h3>"
+    found_data = False
+   
+    for doc in docs:
+        teacher = doc.to_dict()
+        if "name" in teacher and keyword in teacher["name"]:
+            Result += str(teacher) + "<br><br>"
+            found_data = True
+
+    if not found_data:
+        Result += "抱歉，找不到符合的老師資料。<br><br>"
+       
+    Result += '<br><a href="/read2">返回重新搜尋</a>'
+   
     return Result
 
 	

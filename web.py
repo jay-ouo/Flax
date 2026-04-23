@@ -43,20 +43,48 @@ def index():
     link += "<a href=/movie1>爬取即將上映電影</a><hr>"
     return link
 
+from flask import request  # 務必確認有 import request
+
 @app.route("/movie1")
 def movie1():
-    R = ""
+    # 1. 取得搜尋關鍵字
+    q = request.args.get("q")
+    
+    # 2. 加上標題、搜尋介面 (讓使用者可以輸入)
+    # 使用 <h1> 標記名稱，並建立一個 HTML 表單
+    Result = "<h1>即將上映電影</h1>"
+    Result += """
+        <form action="/movie1" method="get">
+            <input type="text" name="q" placeholder="請輸入片名關鍵字" value="{}">
+            <button type="submit">搜尋</button>
+        </form>
+        <hr>
+    """.format(q if q else "")
+    
     url = "https://www.atmovies.com.tw/movie/next/"
     Data = requests.get(url)
     Data.encoding = "utf-8"
-    #print(Data.text)
     sp = BeautifulSoup(Data.text, "html.parser")
-    result=sp.select(".filmListAllX li")
+    result = sp.select(".filmListAllX li")
+    
+    count = 0  # 用來計算符合條件的電影數量
     for item in result:
-        R +=item.find("img").get("alt") + "<br>"
-        R +="https://www.atmovies.com.tw/" + item.find("a").get("href")+ "<br>"
-        R +="https://www.atmovies.com.tw/" + item.find("img").get("src")+ "<br><br>"
-    return R   
+        title = item.find("img").get("alt")
+        
+        # 3. 搜尋邏輯：如果沒輸入關鍵字，或標題包含關鍵字才顯示
+        if not q or q in title:
+            count += 1
+            introduce = "https://www.atmovies.com.tw" + item.find("a").get("href")
+            Result += "<a href =" + introduce + ">" + title + "</a><br>"
+            
+            post = "https://www.atmovies.com.tw" + item.find("img").get("src")
+            Result += "<img src =" + post + ">" + "</img><br><br>"
+            
+    # 如果有輸入關鍵字但沒找到任何電影
+    if count == 0 and q:
+        Result += "很抱歉，找不到包含「" + q + "」的電影。"
+        
+    return Result
 
 @app.route("/mis")
 def course():

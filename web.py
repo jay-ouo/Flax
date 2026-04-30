@@ -7,7 +7,7 @@ from firebase_admin import credentials, firestore
 import requests
 from bs4 import BeautifulSoup
 
-# --- Firebase 初始化邏輯 ---
+# --- 1. Firebase 初始化邏輯 ---
 if not firebase_admin._apps:
     if os.path.exists('serviceAccountKey.json'):
         # 本地環境
@@ -19,13 +19,13 @@ if not firebase_admin._apps:
             cred_dict = json.loads(firebase_config)
             cred = credentials.Certificate(cred_dict)
         else:
-            raise ValueError("找不到 Firebase 配置環境變數")
+            raise ValueError("找不到 Firebase 配置環境變數，請確認 serviceAccountKey.json 或 FIREBASE_CONFIG")
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 app = Flask(__name__)
 
-# --- 路由設定 ---
+# --- 2. 路由設定 ---
 
 @app.route("/")
 def index():
@@ -40,30 +40,25 @@ def index():
     link += "<a href=/read2>讀取Firestore資料(固定關鍵字:楊)</a><hr>"
     link += "<a href=/read3>讀取Firestore資料(動態輸入關鍵字)</a><hr>"
     link += "<a href=/spider>爬取子青老師本學期課程</a><hr>"
-    link += "<a href=/movie>爬取即將上映電影</a><hr>"
+    link += "<a href=/spiderMovie>爬取即將上映電影,存到資料庫</a><hr>"
+    link += "<a href=/movie>爬取即將上映電影並搜尋介面</a><hr>"
     return link
 
-from flask import request  # 務必確認有 import request
-
+# 整合後的電影搜尋與同步系統
 @app.route("/movie")
 def movie_system():
-    # 1. 取得搜尋關鍵字
     q = request.args.get("q")
-    
-    # --- 第一部分：爬蟲並更新到 Firebase ---
     url = "http://www.atmovies.com.tw/movie/next/"
     data = requests.get(url)
     data.encoding = "utf-8"
     sp = BeautifulSoup(data.text, "html.parser")
     
-    # 抓取更新時間
     lastUpdate_tag = sp.find(class_="smaller09")
-    lastUpdate = lastUpdate_tag.text.replace("更新時間：", "") if lastUpdate_tag else "未知"
+    lastUpdate = lastUpdate_tag.text.replace("更新時間：", "").strip() if lastUpdate_tag else "未知"
     
     result = sp.select(".filmListAllX li")
     total_saved = 0
     
-    # --- 第二部分：HTML 介面初始化 ---
     html_content = "<h1>即將上映電影系統</h1>"
     html_content += f"<p style='color: gray;'>資料庫最近更新日期：{lastUpdate}</p>"
     html_content += """
@@ -79,14 +74,12 @@ def movie_system():
     
     for item in result:
         try:
-            # 提取資料
             title = item.find(class_="filmtitle").text
             movie_id = item.find("a").get("href").replace("/movie/", "").replace("/", "")
             picture = "https://www.atmovies.com.tw/" + item.find("img").get("src")
             hyperlink = "https://www.atmovies.com.tw/" + item.find("a").get("href")
             showDate = item.find(class_="runtime").text[5:15]
 
-            # A. 執行寫入 Firebase 動作
             doc = {
                 "title": title,
                 "picture": picture,
@@ -97,28 +90,56 @@ def movie_system():
             db.collection("電影2B").document(movie_id).set(doc)
             total_saved += 1
 
-            # B. 執行搜尋過濾與網頁顯示邏輯
             if not q or q in title:
                 count += 1
                 movie_list_html += f'<h3><a href="{hyperlink}">{title}</a></h3>'
-                movie_list_html += f'<p>電影編號：{movie_id}</p>' # 補上這行，確保符合需求
+                movie_list_html += f'<p>電影編號：{movie_id}</p>'
                 movie_list_html += f'<p>上映日期：{showDate}</p>'
                 movie_list_html += f'<img src="{picture}" width="200"><br><br><hr>'
 
         except Exception as e:
             print(f"處理電影時發生錯誤: {e}")
 
-    # 如果有搜尋但沒結果
     if count == 0 and q:
         movie_list_html = f"<p>很抱歉，找不到包含「{q}」的電影。</p>"
     
-    # 加上統計資訊
     summary = f"<p>系統訊息：本次同步更新了 {total_saved} 部電影到 Firebase 資料庫。</p>"
-    
     return html_content + summary + movie_list_html
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# 獨立的爬蟲同步功能
+@app.route("/spiderMovie")
+def spiderMovie():
+    R = ""
+    url = "http://www.atmovies.com.tw/movie/next/"
+    data = requests.get(url)
+    data.encoding = "utf-8"
+    sp = BeautifulSoup(data.text, "html.parser")
+    
+    lastUpdate_tag = sp.find(class_="smaller09")
+    lastUpdate = lastUpdate_tag.text.replace("更新時間：", "").strip() if lastUpdate_tag else "未知"
+    
+    result = sp.select(".filmListAllX li")
+    total = 0
+    for item in result:
+        try:
+            movie_id = item.find("a").get("href").replace("/movie/", "").replace("/", "")
+            title = item.find(class_="filmtitle").text
+            picture = "https://www.atmovies.com.tw" + item.find("img").get("src")
+            hyperlink = "https://www.atmovies.com.tw" + item.find("a").get("href")
+            showDate = item.find(class_="runtime").text[5:15]
+
+            doc = {
+                "title": title, "picture": picture, "hyperlink": hyperlink,
+                "showDate": showDate, "lastUpdate": lastUpdate
+            }
+            db.collection("電影2B").document(movie_id).set(doc)
+            total += 1
+        except:
+            continue
+
+    R += f"網站最近更新日期：{lastUpdate}<br>"
+    R += f"總共爬取 {total} 部電影到資料庫"
+    return R
 
 @app.route("/mis")
 def course():
@@ -169,7 +190,7 @@ def read():
     Result = "<h2>所有老師資料：</h2>"
     collection_ref = db.collection("靜宜資管2026B")    
     docs = collection_ref.order_by("lab", direction=firestore.Query.DESCENDING).get()    
-    for doc in docs:         
+    for doc in docs:          
         Result += str(doc.to_dict()) + "<br><hr>"    
     return Result + "<a href=/>回首頁</a>"
 
@@ -189,28 +210,21 @@ def read2():
         Result += "抱歉，查無資料"
     return Result + "<br><a href=/>回首頁</a>"
 
-# --- 修改後的 read3：結合表單輸入與 Firestore 查詢 ---
 @app.route("/read3", methods=["GET", "POST"])
 def read3():
     if request.method == "POST":
-        # 抓取 account.html 裡面 name="user" 的欄位當作關鍵字
         keyword = request.values.get("keyword")
         Result = f"<h2>查詢姓名關鍵字：{keyword}</h2>"
-        db=firestore.client()
         collection_ref = db.collection("靜宜資管2026B")
         docs = collection_ref.get()
-        
         found = False
         for doc in docs:
             teacher = doc.to_dict()
             if keyword in teacher.get("name", ""):
                 Result += f"老師：{teacher.get('name')}, 研究室：{teacher.get('lab')}<br>"
                 found = True
-        
         if not found:
             Result += "抱歉，查無此關鍵字之老師資料。"
-
-
         return Result + "<br><a href='/read3'>重新查詢</a> | <a href='/'>回首頁</a>"
     else:
         html="""
@@ -219,26 +233,23 @@ def read3():
             請輸入老師姓名關鍵字
             <input type="text" name="keyword">
             <button type="submit">查詢</button>
-        </from>
+        </form>
         <br><a href="/">回首頁</a>
         """
-        # GET 請求時，顯示輸入表單
         return html
-
 
 @app.route("/spider")
 def spider():
-    Result=""
+    Result="<h2>子青老師本學期課程</h2>"
     url = "https://www1.pu.edu.tw/~tcyang/course.html"
     Data = requests.get(url)
     Data.encoding = "utf-8"
-    #print(Data.text)
     sp = BeautifulSoup(Data.text, "html.parser")
     result=sp.select(".team-box a")
     for i in result:
-        Result+=str(i.text)+str(i.get("href"))+"<br>"
-    return Result
+        Result += f"{i.text} -> <a href='{i.get('href')}'>{i.get('href')}</a><br>"
+    return Result + "<br><a href='/'>回首頁</a>"
 
-
+# --- 3. 程式進入點 (放在最後面) ---
 if __name__ == "__main__":
     app.run(debug=True)

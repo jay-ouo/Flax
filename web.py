@@ -40,51 +40,85 @@ def index():
     link += "<a href=/read2>讀取Firestore資料(固定關鍵字:楊)</a><hr>"
     link += "<a href=/read3>讀取Firestore資料(動態輸入關鍵字)</a><hr>"
     link += "<a href=/spider>爬取子青老師本學期課程</a><hr>"
-    link += "<a href=/movie1>爬取即將上映電影</a><hr>"
+    link += "<a href=/movie>爬取即將上映電影</a><hr>"
     return link
 
 from flask import request  # 務必確認有 import request
 
-@app.route("/movie1")
-def movie1():
+@app.route("/movie")
+def movie_system():
     # 1. 取得搜尋關鍵字
     q = request.args.get("q")
     
-    # 2. 加上標題、搜尋介面 (讓使用者可以輸入)
-    # 使用 <h1> 標記名稱，並建立一個 HTML 表單
-    Result = "<h1>即將上映電影</h1>"
-    Result += """
-        <form action="/movie1" method="get">
+    # --- 第一部分：爬蟲並更新到 Firebase ---
+    url = "http://www.atmovies.com.tw/movie/next/"
+    data = requests.get(url)
+    data.encoding = "utf-8"
+    sp = BeautifulSoup(data.text, "html.parser")
+    
+    # 抓取更新時間
+    lastUpdate_tag = sp.find(class_="smaller09")
+    lastUpdate = lastUpdate_tag.text.replace("更新時間：", "") if lastUpdate_tag else "未知"
+    
+    result = sp.select(".filmListAllX li")
+    total_saved = 0
+    
+    # --- 第二部分：HTML 介面初始化 ---
+    html_content = "<h1>即將上映電影系統</h1>"
+    html_content += f"<p style='color: gray;'>資料庫最近更新日期：{lastUpdate}</p>"
+    html_content += """
+        <form action="/movie" method="get">
             <input type="text" name="q" placeholder="請輸入片名關鍵字" value="{}">
             <button type="submit">搜尋</button>
         </form>
         <hr>
     """.format(q if q else "")
     
-    url = "https://www.atmovies.com.tw/movie/next/"
-    Data = requests.get(url)
-    Data.encoding = "utf-8"
-    sp = BeautifulSoup(Data.text, "html.parser")
-    result = sp.select(".filmListAllX li")
+    movie_list_html = ""
+    count = 0 
     
-    count = 0  # 用來計算符合條件的電影數量
     for item in result:
-        title = item.find("img").get("alt")
-        
-        # 3. 搜尋邏輯：如果沒輸入關鍵字，或標題包含關鍵字才顯示
-        if not q or q in title:
-            count += 1
-            introduce = "https://www.atmovies.com.tw" + item.find("a").get("href")
-            Result += "<a href =" + introduce + ">" + title + "</a><br>"
-            
-            post = "https://www.atmovies.com.tw" + item.find("img").get("src")
-            Result += "<img src =" + post + ">" + "</img><br><br>"
-            
-    # 如果有輸入關鍵字但沒找到任何電影
+        try:
+            # 提取資料
+            title = item.find(class_="filmtitle").text
+            movie_id = item.find("a").get("href").replace("/movie/", "").replace("/", "")
+            picture = "https://www.atmovies.com.tw/" + item.find("img").get("src")
+            hyperlink = "https://www.atmovies.com.tw/" + item.find("a").get("href")
+            showDate = item.find(class_="runtime").text[5:15]
+
+            # A. 執行寫入 Firebase 動作
+            doc = {
+                "title": title,
+                "picture": picture,
+                "hyperlink": hyperlink,
+                "showDate": showDate,
+                "lastUpdate": lastUpdate
+            }
+            db.collection("電影2B").document(movie_id).set(doc)
+            total_saved += 1
+
+            # B. 執行搜尋過濾與網頁顯示邏輯
+            if not q or q in title:
+                count += 1
+                movie_list_html += f'<h3><a href="{hyperlink}">{title}</a></h3>'
+                movie_list_html += f'<p>電影編號：{movie_id}</p>' # 補上這行，確保符合需求
+                movie_list_html += f'<p>上映日期：{showDate}</p>'
+                movie_list_html += f'<img src="{picture}" width="200"><br><br><hr>'
+
+        except Exception as e:
+            print(f"處理電影時發生錯誤: {e}")
+
+    # 如果有搜尋但沒結果
     if count == 0 and q:
-        Result += "很抱歉，找不到包含「" + q + "」的電影。"
-        
-    return Result
+        movie_list_html = f"<p>很抱歉，找不到包含「{q}」的電影。</p>"
+    
+    # 加上統計資訊
+    summary = f"<p>系統訊息：本次同步更新了 {total_saved} 部電影到 Firebase 資料庫。</p>"
+    
+    return html_content + summary + movie_list_html
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 @app.route("/mis")
 def course():

@@ -43,13 +43,69 @@ def index():
     link += "<a href=/spiderMovie>爬取即將上映電影,存到資料庫</a><hr>"
     link += "<a href=/movie>爬取即將上映電影並搜尋介面</a><hr>"
     link += "<a href=/road>台中十大肇事路口</a><hr>"
+    link += "<a href=/weather>天氣預報查詢</a><hr>"
     return link
 
 
 
+
+
+
+
+@app.route("/weather")
+def weather():
+    # 1. 取得使用者搜尋的縣市 (預設為空字串，這樣一進網頁就不會先抓台中)
+    city = request.args.get("city", "")
+    
+    # 2. 搜尋介面 (表單)
+    R = """
+    <form action="/weather" method="get">
+        請輸入縣市：<input type="text" name="city" placeholder="例如：台北市">
+        <input type="submit" value="查詢">
+    </form>
+    <hr>
+    """
+    
+    # 3. 判斷：如果使用者有輸入東西才去抓 API
+    if city:
+        city = city.replace("台", "臺")
+        
+        # 提醒：Authorization 記得要換成你申請到的正確金鑰喔！
+        auth_key = "rdec-key-123-45678-011121314"
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization={auth_key}&format=JSON&locationName={city}"
+        
+        try:
+            Data = requests.get(url, verify=False)
+            JsonData = json.loads(Data.text)
+            
+            # 檢查 API 是否有抓到這個縣市的資料
+            if JsonData["records"]["location"]:
+                loc_name = JsonData["records"]["location"][0]["locationName"]
+                Weather = JsonData["records"]["location"][0]["weatherElement"][0]["time"][0]["parameter"]["parameterName"]
+                Rain = JsonData["records"]["location"][0]["weatherElement"][1]["time"][0]["parameter"]["parameterName"]
+                
+                R += f"<h2>{loc_name} 最新天氣預報</h2>"
+                R += f"天氣狀況：{Weather}<br>"
+                R += f"降雨機率：{Rain}%"
+            else:
+                R += f"<b style='color:orange;'>找不到「{city}」的資料，請確認名稱是否正確。</b>"
+                
+        except Exception as e:
+            R += f"<b style='color:red;'>連線失敗或 API 金鑰錯誤。</b>"
+    else:
+        # 如果沒輸入東西，就顯示歡迎文字
+        R += "<h1>歡迎使用天氣預報系統 作者:周英智</h1>"
+        R += "請在上方輸入框輸入想要查詢的縣市名稱。"
+
+    return R
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
 @app.route("/road")
 def road():
-    R= "<h1>台中十大肇事路口(113年10月)</h1>"
+    R= "<h1>台中十大肇事路口(113年10月)作者:周英智</h1>"
 
     url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
     Data = requests.get(url,verify=False)

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, make_response, jsonify
 from datetime import datetime
 import os
 import json
@@ -60,7 +60,7 @@ def webhook():
     elif rate == "G": rate = "普遍級"
 
     # 設定開頭語，加上你的名字
-    info = f"我是林哲旭設計的機器人。關於您查詢「{rate}」的電影：\n"
+    info = f"我是周英智設計的機器人。關於您查詢「{rate}」的電影：\n"
 
     db = firestore.client()
     # 提醒：名稱需與 /rate 存入時的 "本週新片含分級" 一致

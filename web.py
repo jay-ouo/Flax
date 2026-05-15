@@ -48,9 +48,35 @@ def index():
 
 
 
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    req = request.get_json(force=True)
+    # 取得 Dialogflow 傳來的分級參數
+    rate = req["queryResult"]["parameters"].get("rate")
+   
+    # 簡單轉換：對應你資料庫存入的中文名稱
+    if rate == "P": rate = "保護級"
+    elif rate == "G": rate = "普遍級"
 
+    # 設定開頭語，加上你的名字
+    info = f"我是林哲旭設計的機器人。關於您查詢「{rate}」的電影：\n"
 
+    db = firestore.client()
+    # 提醒：名稱需與 /rate 存入時的 "本週新片含分級" 一致
+    docs = db.collection("本週新片含分級").get()
+   
+    result = ""
+    for doc in docs:
+        m = doc.to_dict()
+        if rate in m.get("rate", ""):
+            result += m.get("title") + "\n"
 
+    if result == "":
+        info += "目前資料庫中查無此級別的電影。"
+    else:
+        info += result
+
+    return jsonify({"fulfillmentText": info})
 
 @app.route("/weather")
 def weather():
